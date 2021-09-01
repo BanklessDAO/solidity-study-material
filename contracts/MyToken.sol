@@ -1,40 +1,81 @@
 //SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.0;
 
-import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
-import '@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol';
-import '@openzeppelin/contracts/access/AccessControl.sol';
-import '@openzeppelin/contracts/token/ERC20/extensions/ERC20Pausable.sol';
+interface ERC20 {
+    function totalSupply() external view returns (uint _totalSupply);
+    function balanceOf(address _owner) external view returns (uint balance);
+    function transfer(address _to, uint _value) external returns (bool success);
+    function transferFrom(address _from, address _to, uint _value) external returns (bool success);
+    function approve(address _spender, uint _value) external returns (bool success);
+    function allowance(address _owner, address _spender) external view returns (uint remaining);
+    event Transfer(address indexed _from, address indexed _to, uint _value);
+    event Approval(address indexed _owner, address indexed _spender, uint _value);
+}
 
-contract MyToken is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
+contract MyToken is ERC20 {
+    
+    string public constant symbol = "MTK";
+    string public constant name = "MyToken";
+    uint256 public constant decimals = 18;
 
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-    bytes32 public constant PAUSER_ROLE = keccak256('PAUSER_ROLE');
+    uint256 private constant _totalSupply = 1000000000000000000000;
 
-    uint256 public initialSupply = 1000;
+    mapping (address =>  uint256) private _balanceOf;
 
-    constructor(string memory name, string memory symbol) ERC20(name, symbol) {
-        _mint(msg.sender, initialSupply);
-        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _setupRole(MINTER_ROLE, msg.sender);
-        _setupRole(PAUSER_ROLE, msg.sender);
+    mapping (address => mapping(address => uint256)) private _allowances;
+
+    constructor() {
+        _balanceOf[msg.sender] = _totalSupply;
     }
 
-    function mint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {
-        _mint(to, amount);
+    function totalSupply() public pure override returns (uint256){
+        return _totalSupply;
     }
 
-    function pause() public onlyRole(PAUSER_ROLE){
-        _pause();
+    function balanceOf(address _addr) public view override returns (uint256) {
+        return _balanceOf[_addr];
     }
 
-    function unpause() public onlyRole(PAUSER_ROLE) {
-        _unpause();
+    function transfer(address _to, uint256 _value) public override returns (bool) {
+        if(_value > 0 &&  _value <= balanceOf(msg.sender)) {
+            _balanceOf[msg.sender] -= _value;
+            _balanceOf[_to] += _value; 
+            emit Transfer(msg.sender, _to, _value);
+            return true;
+        }
+        return false;
     }
 
-
-    function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual override(ERC20, ERC20Pausable) {
-        super._beforeTokenTransfer(from, to, amount);
+    function isContract(address _addr) public view returns (bool) {
+        uint codeSize;
+        assembly {
+            codeSize := extcodesize(_addr)
+        }
+        return codeSize > 0;  
     }
 
+    function transferFrom(address _from, address _to, uint256 _value) public override returns (bool) {
+        if(_allowances[_from][msg.sender] > 0 &&
+        _value > 0 && 
+        _allowances[_from][msg.sender] >= _value &&
+        _value <= balanceOf(msg.sender) &&
+        !isContract(_to)) {                
+            _balanceOf[msg.sender] -= _value;
+            _balanceOf[_to] += _value; 
+            emit Transfer(msg.sender, _to, _value);
+            return true;
+        }
+        return false;
+    }
+
+ 
+    function approve(address _spender, uint256 _value) external override returns (bool) {
+        _allowances[msg.sender][_spender] = _value;
+        emit Approval (msg.sender, _spender, _value);
+        return true;
+    }
+
+    function allowance(address _owner, address _spender) external override view returns (uint256) {
+        return _allowances[_owner][_spender];
+    }
 }
